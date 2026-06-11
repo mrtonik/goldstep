@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-2-Clause
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goldstep"
+version = "0.1.0"
+description = "Golden-image UI test harness for GNUstep apps, driven via UIBridge (XTEST input, Xephyr, TAP)."
+requires-python = ">=3.8"
+license = { text = "BSD-2-Clause" }
+authors = [{ name = "Michael Hupp" }]
+keywords = ["gnustep", "uibridge", "testing", "golden-image", "xtest", "tap"]
+
+[tool.setuptools]
+packages = ["goldstep"]

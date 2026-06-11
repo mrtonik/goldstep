@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# editors / OS
+*.swp
+.DS_Store
+
+# crash dumps / capture scratch
+*.core

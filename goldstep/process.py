@@ -5,14 +5,21 @@
 A thin wrapper over subprocess: spawn an argv with a given environment, send its
 stdout/stderr to a log file, and tear it down cleanly. App-agnostic — the caller
 supplies the argv (e.g. a resolved .app binary path).
+
+An optional `wrapper` prefixes the argv with a launcher — e.g. valgrind, or any
+`prog args -- ` style tool — so the app runs under instrumentation without the
+caller reassembling the argv. `goldstep.diagnostics` builds common wrappers.
 """
 
 import subprocess
 
 
 class AppProcess:
-    def __init__(self, argv, env, log_path):
+    def __init__(self, argv, env, log_path, wrapper=None):
         self.argv = [argv] if isinstance(argv, str) else list(argv)
+        # wrapper is a launcher argv prefixed before the app (valgrind, etc.).
+        if wrapper:
+            self.argv = list(wrapper) + self.argv
         self._env = env
         self._log = open(log_path, "wb")
         self.proc = None

@@ -18,6 +18,7 @@ Quick start:
     run("smoke", "/path/to/Foo.app/Foo", body)
 """
 
+from . import diagnostics
 from . import screenshot
 from .bridge import Bridge
 from .config import Config
@@ -32,4 +33,5 @@ from .xephyr import Xephyr
 __all__ = [
     "MCPClient", "MCPError", "Config", "Sandbox", "AppProcess", "Bridge",
     "Session", "run", "run_xephyr", "Xephyr", "Test", "StateDump", "screenshot",
+    "diagnostics",
 ]

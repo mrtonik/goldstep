@@ -41,10 +41,13 @@ class Session:
     def __init__(self, launch, name=None, *, ready_timeout=20, keep=False,
                  display=None, extra_defaults=None, theme=None, config=None,
                  state_dump=None, require_dump=False, bridge_cls=Bridge,
-                 prepare=None):
+                 prepare=None, launch_wrapper=None):
         self.launch = launch
         self.name = name or _default_name(launch)
         self.ready_timeout = ready_timeout
+        # launch_wrapper: an argv prefix (valgrind, etc.) run in front of the app.
+        # Instrumented launches are much slower to become ready — bump the timeout.
+        self.launch_wrapper = launch_wrapper
         self.keep = keep or bool(os.environ.get("GOLDSTEP_KEEP"))
         # display=None => host $DISPLAY; ":N" => a private Xephyr. When set, both
         # the app AND the UIBridge server are pinned to it, so the app is the
@@ -91,7 +94,8 @@ class Session:
         if self.display:
             app_env["DISPLAY"] = self.display
         log = os.path.join(self.sandbox.dir, "app.log")
-        self.app = AppProcess(_resolve_launch(self.launch), app_env, log)
+        self.app = AppProcess(_resolve_launch(self.launch), app_env, log,
+                              wrapper=self.launch_wrapper)
         self.bridge.capture_launch_baseline()   # before spawn: identify the new window
         pid = self.app.spawn()
         self._await_ready(pid)
@@ -129,7 +133,8 @@ class Session:
         if self.display:
             app_env["DISPLAY"] = self.display
         log = os.path.join(self.sandbox.dir, "app-restart.log")
-        self.app = AppProcess(_resolve_launch(self.launch), app_env, log)
+        self.app = AppProcess(_resolve_launch(self.launch), app_env, log,
+                              wrapper=self.launch_wrapper)
         self.bridge.pid = None
         self.bridge._screen_h = None
         self.bridge.capture_launch_baseline()   # old window is gone; identify the new one

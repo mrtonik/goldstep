@@ -141,6 +141,49 @@ snapshot of its widgets on a timer, and read it via a `StateDump`:
 
 Without this, `s.bridge.dump()` raises and you stay tree-only.
 
+### 5. Differential rendering (theme A vs theme B)
+
+`Session`/`Sandbox` take a `theme=` argument: an absolute bundle path forces that
+`GSTheme`, `None` inherits the configured/system theme, and **`theme=False` forces
+the built-in base theme** by removing any inherited `GSTheme` key — the control for
+a differential run. Render the same app under two themes and diff per widget, using
+base as an independent oracle for "these states should look different":
+
+```python
+from goldstep import Session
+import goldstep.screenshot as S
+
+def capture(label, theme):
+    with Session(app, display=disp, theme=theme) as s:
+        xid = s.bridge.main_window_xid()
+        S.capture(xid, "artifacts/%s.png" % label, display=s.bridge.display)
+
+capture("themed", "/path/Dev.theme")
+capture("base", False)           # built-in base GSTheme
+```
+
+### 6. Runtime diagnostics (valgrind / sanitizers, optional)
+
+`Session(launch_wrapper=...)` prefixes the app with a launcher so it runs under a
+runtime checker — no rebuild for valgrind. `goldstep.diagnostics` builds the
+wrappers:
+
+```python
+from goldstep import Session
+from goldstep import diagnostics as diag
+
+wrap = diag.valgrind("memcheck", "artifacts/mc.log")   # or "helgrind" / "drd"
+with Session(app, display=disp, launch_wrapper=wrap,
+             require_dump=True, ready_timeout=900) as s:   # see caveats
+    s.bridge.find(cls="NSButton")
+```
+
+`asan_env(env, **opts)` / `tsan_env(...)` tune sanitizer options for an app already
+built with the matching `-fsanitize=` flag. Caveats: GNUstep startup under valgrind
+is minutes-slow — use `require_dump=True` + a large `ready_timeout` so ready-detection
+waits for the *real* app, not a fallback tree; and `memcheck` serialises threads, so
+use `helgrind`/`drd` (or a TSan build) to find data races.
+
 ### Environment overrides
 
 | Variable | Purpose |

@@ -36,8 +36,14 @@ class Sandbox:
         os.makedirs(self.defaults_dir, exist_ok=True)
         self._extra_env = {}
         self._seed_global_defaults()
+        # theme: a bundle path forces GSTheme to it; None inherits config.theme;
+        # False forces the *base* GSTheme by removing any inherited GSTheme key
+        # (the seeded system defaults may carry one) — used for differential
+        # "Eau-vs-base" control runs.
         theme = theme if theme is not None else config.theme
-        if theme:
+        if theme is False:
+            self._clear_theme()
+        elif theme:
             self._set_theme(theme)
         if extra_defaults:
             self._merge_global_domain(extra_defaults)
@@ -65,6 +71,21 @@ class Sandbox:
         data["GSTheme"] = theme_path
         with open(path, "wb") as f:
             plistlib.dump(data, f)
+
+    def _clear_theme(self):
+        """Remove any GSTheme key from the sandbox defaults so the app loads the
+        built-in base GSTheme (the control for a differential run). The seeded
+        system GlobalDefaults may set GSTheme, so skipping _set_theme is not
+        enough — the key must be deleted."""
+        path = os.path.join(self.defaults_dir, "NSGlobalDomain.plist")
+        try:
+            with open(path, "rb") as f:
+                data = plistlib.load(f)
+        except Exception:
+            return
+        if data.pop("GSTheme", None) is not None:
+            with open(path, "wb") as f:
+                plistlib.dump(data, f)
 
     def _merge_global_domain(self, extra):
         """Merge extra keys into NSGlobalDomain (e.g. NSMenuInterfaceStyle) so a

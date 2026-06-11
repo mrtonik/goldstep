@@ -53,6 +53,15 @@ UIBRIDGE_SERVER=~/Library/Tools/UIBridgeServer DISPLAY=:0 python3 smoke_test.py
 Each test file is one TAP stream and exits non-zero if any check fails, so a
 shell loop can aggregate pass/fail across files.
 
+## Example
+
+A complete worked example lives in the **Clock** app's repo
+([mrtonik/Clock](https://github.com/mrtonik/Clock), under `tests-goldstep/`): a
+12-file / 201-check suite covering tabs, alarms (incl. a real alarm firing),
+timer, world clock, menus, i18n (EN/DE/FR/ES), persistence (restart + malformed
+defaults), a modal quit guard, hostile-input fuzzing, and a golden-image layer —
+all on goldstep. Its `clockkit.py` shows the recommended app-helper pattern.
+
 ## Testing your own GNUstep / Gershwin app
 
 ### 1. Point goldstep at your app

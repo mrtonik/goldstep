@@ -16,7 +16,16 @@ via add_env() rather than the sandbox knowing about it.
 import os
 import plistlib
 import shutil
+import subprocess
 import tempfile
+
+
+def _defaults_tool():
+    """The GNUstep `defaults` CLI: $GOLDSTEP_DEFAULTS_TOOL, else $PATH, else the
+    conventional /System location."""
+    return (os.environ.get("GOLDSTEP_DEFAULTS_TOOL")
+            or shutil.which("defaults")
+            or "/System/Library/Tools/defaults")
 
 
 class Sandbox:
@@ -88,6 +97,49 @@ class Sandbox:
         kept.append("GNUSTEP_USER_CONFIG_FILE=%s\n" % os.path.join(self.dir, "user-none.conf"))
         with open(self.conf, "w") as f:
             f.writelines(kept)
+
+    # ---- defaults seeding / inspection (for apps that persist their own domain) ----
+    def domain_path(self, domain):
+        """Path to a defaults domain plist inside the sandbox, e.g.
+        'org.gershwin.Clock' -> <sandbox>/Defaults/org.gershwin.Clock.plist."""
+        return os.path.join(self.defaults_dir, "%s.plist" % domain)
+
+    def write_plist_file(self, domain, data):
+        """Seed a defaults domain before launch. `data` may be a dict/list (written
+        as an XML plist GNUstep reads) or raw str/bytes (written verbatim — for
+        malformed-input tests)."""
+        path = self.domain_path(domain)
+        if isinstance(data, (bytes, bytearray)):
+            with open(path, "wb") as f:
+                f.write(data)
+        elif isinstance(data, str):
+            with open(path, "w") as f:
+                f.write(data)
+        else:
+            with open(path, "wb") as f:
+                plistlib.dump(data, f)
+
+    def read_plist_file(self, domain):
+        """Raw text of a defaults domain plist (e.g. after the app persisted it),
+        or None. GNUstep may write OpenStep-format plists, so callers usually
+        substring-match (assert a city/alarm name is present) rather than parse."""
+        try:
+            with open(self.domain_path(domain), "r", errors="replace") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def read_default(self, domain, key=None):
+        """Read a persisted default via the GNUstep `defaults` tool under the
+        sandbox env (reads the sandbox's domain, not the real one). Returns the
+        printed value as text, or None. Use a `key` to scope the read — e.g. to
+        tell one key's dict-valued entries from another's."""
+        argv = [_defaults_tool(), "read", domain] + ([key] if key else [])
+        try:
+            p = subprocess.run(argv, env=self.env(), capture_output=True, text=True)
+        except OSError:
+            return None
+        return p.stdout.strip() if p.returncode == 0 else None
 
     def add_env(self, mapping):
         """Register extra environment to carry into launched apps (used by opt-in

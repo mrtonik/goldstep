@@ -30,6 +30,10 @@ class Bridge:
         self.c = client
         self.pid = None
         self.state_dump = None          # optional; see statedump.StateDump
+        # X11 window ids present before the app launched — lets us recognise the
+        # app's window as "new since launch" when pid matching fails on a busy
+        # shared desktop (set by Session via capture_launch_baseline()).
+        self.launch_baseline = None
         self._screen_h = None
         # X display the app renders into. None => host $DISPLAY; ":N" => a private
         # Xephyr. Direct xwininfo/xdotool calls are pinned to it; the MCP x11_*
@@ -158,19 +162,46 @@ class Bridge:
     def x11_windows(self):
         return self.c.call_json("x11_list_windows").get("windows", [])
 
+    def capture_launch_baseline(self):
+        """Snapshot the X11 windows present BEFORE the app launches, so its window
+        can be recognised as 'new since launch' if pid matching later fails on a
+        busy desktop. Called by Session just before spawn; harmless in a nested
+        Xephyr (where the app is the only client anyway)."""
+        try:
+            self.launch_baseline = {w.get("id") for w in self.x11_windows()}
+        except Exception:
+            self.launch_baseline = None
+        return self.launch_baseline
+
+    @staticmethod
+    def _box(w):
+        return {"id": w["id"], "x": w["x"], "y": w["y"], "w": w["width"], "h": w["height"]}
+
+    def _app_windows(self, min_w=1, min_h=1):
+        """X11 windows belonging to the app under test, robust to a cluttered
+        shared desktop. Nested Xephyr: the app is the only client, so take all of
+        sufficient size. Host: prefer our pid; if none match (a busy desktop can
+        leave the app's _NET_WM_PID unset, or stale windows can shadow it), fall
+        back to windows that appeared since launch."""
+        sized = [w for w in self.x11_windows()
+                 if w.get("width", 0) >= min_w and w.get("height", 0) >= min_h]
+        if self.nested:
+            return sized
+        by_pid = [w for w in sized if w.get("pid") == self.pid]
+        if by_pid:
+            return by_pid
+        if self.launch_baseline is not None:
+            return [w for w in sized if w.get("id") not in self.launch_baseline]
+        return []
+
     def main_window_box(self, min_w=120, min_h=60):
-        """The X11 frame window to screenshot: our pid's largest real window.
+        """The X11 frame window to screenshot: the app's largest real window.
         Returns {'id','x','y','w','h'} (X11 top-left coords) or None."""
         best = None
-        for w in self.x11_windows():
-            if not self.nested and w.get("pid") != self.pid:
-                continue
-            if w.get("width", 0) < min_w or w.get("height", 0) < min_h:
-                continue
+        for w in self._app_windows(min_w, min_h):
             area = w["width"] * w["height"]
             if best is None or area > best[1]:
-                best = ({"id": w["id"], "x": w["x"], "y": w["y"],
-                         "w": w["width"], "h": w["height"]}, area)
+                best = (self._box(w), area)
         return best[0] if best else None
 
     def main_window_xid(self, **kw):
@@ -195,12 +226,9 @@ class Bridge:
     def window_box_by_size(self, w, h, tol=2):
         """Full {id,x,y,w,h} of a window matched by size — for chrome windows
         (panel/sheet/menu) we know the dimensions of but not the id."""
-        for xw in self.x11_windows():
-            if not self.nested and xw.get("pid") != self.pid:
-                continue
+        for xw in self._app_windows():
             if abs(xw.get("width", -1) - w) <= tol and abs(xw.get("height", -1) - h) <= tol:
-                return {"id": xw["id"], "x": xw["x"], "y": xw["y"],
-                        "w": xw["width"], "h": xw["height"]}
+                return self._box(xw)
         return None
 
     def activate(self, xid):

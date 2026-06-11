@@ -40,7 +40,8 @@ def _default_name(launch):
 class Session:
     def __init__(self, launch, name=None, *, ready_timeout=20, keep=False,
                  display=None, extra_defaults=None, theme=None, config=None,
-                 state_dump=None, require_dump=False, bridge_cls=Bridge):
+                 state_dump=None, require_dump=False, bridge_cls=Bridge,
+                 prepare=None):
         self.launch = launch
         self.name = name or _default_name(launch)
         self.ready_timeout = ready_timeout
@@ -55,6 +56,9 @@ class Session:
         self.state_dump_factory = state_dump
         self.require_dump = require_dump
         self.bridge_cls = bridge_cls
+        # prepare(sandbox): optional callback run after the sandbox is built but
+        # BEFORE the app launches — e.g. to seed the app's own defaults domain.
+        self.prepare = prepare
         self.sandbox = None
         self.app = None
         self.client = None
@@ -71,6 +75,8 @@ class Session:
             self.dump = self.state_dump_factory
         if self.dump:
             self.dump.instrument()
+        if self.prepare:
+            self.prepare(self.sandbox)
 
         server_env = None
         if self.display:
@@ -86,6 +92,7 @@ class Session:
             app_env["DISPLAY"] = self.display
         log = os.path.join(self.sandbox.dir, "app.log")
         self.app = AppProcess(_resolve_launch(self.launch), app_env, log)
+        self.bridge.capture_launch_baseline()   # before spawn: identify the new window
         pid = self.app.spawn()
         self._await_ready(pid)
         return self
@@ -109,6 +116,26 @@ class Session:
                 last = e
             time.sleep(0.4)
         raise MCPError("%s not ready in %ss (%s)" % (self.name, self.ready_timeout, last))
+
+    def restart(self):
+        """Quit and relaunch the app in the SAME sandbox (to test that persisted
+        state survives a restart). Re-attaches and waits ready; returns the new
+        pid. Defaults seeded via `prepare` are NOT re-run — the point is the app's
+        own persistence."""
+        if self.app:
+            self.app.kill()
+        time.sleep(0.6)
+        app_env = self.sandbox.env()
+        if self.display:
+            app_env["DISPLAY"] = self.display
+        log = os.path.join(self.sandbox.dir, "app-restart.log")
+        self.app = AppProcess(_resolve_launch(self.launch), app_env, log)
+        self.bridge.pid = None
+        self.bridge._screen_h = None
+        self.bridge.capture_launch_baseline()   # old window is gone; identify the new one
+        pid = self.app.spawn()
+        self._await_ready(pid)
+        return pid
 
     def __exit__(self, *exc):
         if self.app:

@@ -7,6 +7,12 @@ app through the **UIBridge** MCP server — widget tree, menus, XTEST mouse/keyb
 asserts on structure, the live tree, and per-window **golden-image** diffs.
 Output is **TAP**.
 
+It can also run the app under **valgrind / ASan / TSan** for runtime diagnostics
+([§6](#6-runtime-diagnostics-valgrind--sanitizers-optional)), and do
+**theme-vs-theme differential rendering** — any `GSTheme` against the built-in
+base, as an independent oracle ([§5](#5-differential-rendering-theme-a-vs-theme-b)) —
+neither of which needs the app rebuilt (valgrind) or changed.
+
 No AI is involved: "MCP" here is just JSON-RPC over stdio, used as a plain
 automation API. The harness is stdlib-only Python.
 
@@ -21,6 +27,8 @@ automation API. The harness is stdlib-only Python.
   at it, or have it on `$PATH`.
 - Command-line tools: `xdotool`, ImageMagick (`import`, `convert`, `compare`),
   and — for `run_xephyr` — `Xephyr` and `xdpyinfo`.
+- *(optional, for runtime diagnostics)* `valgrind`; or an `-fsanitize=address` /
+  `-fsanitize=thread` build of the app + theme for `asan_env` / `tsan_env`.
 - Python ≥ 3.8.
 
 ## Install
